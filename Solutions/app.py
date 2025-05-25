@@ -14,7 +14,7 @@ if client_id:
         st.warning(f"No se espera una próxima compra. (Probabilidad: {result['probabilidad']:.2f})")
     else:
         st.success("¡Se espera una próxima compra!")
-        st.markdown(f"📅 **Fecha estimada:** {result['fecha_estimada']}")
-        st.markdown(f"💰 **Monto estimado:** ${result['monto_estimado']}")
-        st.markdown(f"🏪 **Comercio estimado:** {result['comercio_estimado']}")
-        st.markdown(f"📈 **Probabilidad:** {result['probabilidad']:.2f}")
+        st.markdown(f"📅 *Fecha estimada:* {result['fecha_estimada']}")
+        st.markdown(f"💰 *Monto estimado:* ${result['monto_estimado']}")
+        st.markdown(f"🏪 *Comercio estimado:* {result['comercio_estimado']}")
+        st.markdown(f"📈 *Probabilidad:* {result['probabilidad']:.2f}")
