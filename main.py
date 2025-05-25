@@ -43,6 +43,10 @@ df_transactions['comercio'] = df_transactions['comercio'].replace('DIDIFOOD', 'D
 df_transactions['comercio'] = df_transactions['comercio'].replace('MERCADOPAGO', 'MERCADO PAGO')
 df_transactions['comercio'] = df_transactions['comercio'].replace('SMARTFIT', 'SMART FIT')
 df_transactions['comercio'] = df_transactions['comercio'].replace('WAL-MART', 'WALMART')
+df_transactions['comercio'] = df_transactions['comercio'].replace({
+  'MI ATT': 'AT&T',
+  'ATT': 'AT&T'
+})
 
 print("Final size (Transactions):", len(df_transactions))
 
