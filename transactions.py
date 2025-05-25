@@ -45,3 +45,4 @@ df_transactions['comercio'] = df_transactions['comercio'].replace('SMARTFIT', 'S
 df_transactions['comercio'] = df_transactions['comercio'].replace('WAL-MART', 'WALMART')
 
 print("Final size (Transactions):", len(df_transactions))
+df_transactions.to_csv('./db/proccessed_db/df_transactions.csv', index=False)

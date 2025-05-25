@@ -47,3 +47,5 @@ df_transactions['comercio'] = df_transactions['comercio'].replace('WAL-MART', 'W
 print("Final size (Transactions):", len(df_transactions))
 
 merged_df = df_transactions.merge(df_clients, on='id', how='right')
+
+merged_df.to_csv('./db/proccessed_db/merged.csv', index=False)

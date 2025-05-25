@@ -20,3 +20,6 @@ invalid_births = df_clients[df_clients['fecha_nacimiento'] < pd.Timestamp('1900-
 df_clients = df_clients[df_clients['fecha_nacimiento'] >= pd.Timestamp('1900-01-01')]
 
 print("Final size (Clients):", len(df_clients))
+
+df_clients.to_csv('./db/proccessed_db/db_clients.csv', index=False)
+
