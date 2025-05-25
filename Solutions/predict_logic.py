@@ -1,64 +1,79 @@
 import pandas as pd
 import numpy as np
 import joblib
-from datetime import timedelta
+from datetime import datetime
 
-# Cargar modelos
-clf = joblib.load("model_clf.xgb")
-reg_days = joblib.load("model_reg_days.xgb")
-reg_amt = joblib.load("model_reg_amt.xgb")
+FEATURES = [
+    'días_desde_última',
+    'monto_actual',
+    'promedio_montos_previos',
+    'periodicidad_media',
+    'trans_previas'
+]
 
-# Cargar datos
-df_clients = pd.read_csv("db_clients.csv")
-df_transactions = pd.read_csv("db_transactions.csv")
+def cargar_modelos():
+    clf = joblib.load('model_clf.xgb')
+    reg_days = joblib.load('model_reg_days.xgb')
+    reg_amt = joblib.load('model_reg_amt.xgb')
+    return clf, reg_days, reg_amt
 
-# Preprocesamiento básico
-df_clients['fecha_nacimiento'] = pd.to_datetime(df_clients['fecha_nacimiento'], errors='coerce')
-df_transactions['fecha'] = pd.to_datetime(df_transactions['fecha'], errors='coerce')
+def construir_features_de_prediccion(df_transacciones, cliente_id, comercio):
+    df_transacciones['fecha'] = pd.to_datetime(df_transacciones['fecha'], errors='coerce')
+    historial = df_transacciones[
+        (df_transacciones['id'] == cliente_id) &
+        (df_transacciones['comercio'] == comercio)
+    ].sort_values('fecha')
 
-def predict_next_purchase(client_id):
-    user_tx = df_transactions[df_transactions['id'] == client_id].copy()
-    if user_tx.shape[0] < 3:
-        return {"error": "No hay suficientes transacciones para este cliente."}
+    if len(historial) < 3:
+        raise ValueError("No hay suficientes transacciones previas para predecir (mínimo 3)")
 
-    user_tx = user_tx.sort_values("fecha").reset_index(drop=True)
-    user_tx["days_diff"] = user_tx["fecha"].diff().dt.days
+    historial = historial.reset_index(drop=True)
+    historial['days_diff'] = historial['fecha'].diff().dt.days
 
-    # Última transacción
-    last_tx = user_tx.iloc[-1]
-    prev_tx = user_tx.iloc[:-1]
+    actual = historial.iloc[-1]
+    prev = historial.iloc[:-1]
 
-    # Features
-    días_desde_última = user_tx.iloc[-1]["days_diff"]
-    monto_actual = last_tx["monto"]
-    promedio_montos_previos = prev_tx["monto"].mean()
-    periodicidad_media = prev_tx["days_diff"].mean()
-    trans_previas = len(prev_tx)
-
-    X_pred = pd.DataFrame([{
-        "días_desde_última": días_desde_última,
-        "monto_actual": monto_actual,
-        "promedio_montos_previos": promedio_montos_previos,
-        "periodicidad_media": periodicidad_media,
-        "trans_previas": trans_previas
-    }])
-
-    # Clasificación
-    prob = clf.predict_proba(X_pred)[0, 1]
-    if prob < 0.5:
-        return {"proxima_compra": False, "probabilidad": prob}
-
-    # Regresión
-    dias_estimados = reg_days.predict(X_pred)[0]
-    monto_estimado = reg_amt.predict(X_pred)[0]
-    fecha_estimado = last_tx["fecha"] + timedelta(days=int(dias_estimados))
-
-    comercio_estimado = user_tx["comercio"].mode().iloc[0] if not user_tx["comercio"].mode().empty else "Desconocido"
-
-    return {
-        "proxima_compra": True,
-        "probabilidad": prob,
-        "fecha_estimada": fecha_estimado.date().isoformat(),
-        "monto_estimado": round(monto_estimado, 2),
-        "comercio_estimado": comercio_estimado
+    features = {
+        'días_desde_última': actual['days_diff'],
+        'monto_actual': actual['monto'],
+        'promedio_montos_previos': prev['monto'].mean(),
+        'periodicidad_media': prev['days_diff'].mean(),
+        'trans_previas': len(prev)
     }
+
+    return pd.DataFrame([features])
+
+def predecir_recurrencia(df_features, clf_model):
+    prob = clf_model.predict_proba(df_features)[:, 1][0]
+    return prob
+
+def predecir_días_y_monto(df_features, reg_days, reg_amt):
+    dias_pred = np.expm1(reg_days.predict(df_features)[0])
+    monto_pred = np.expm1(reg_amt.predict(df_features)[0])
+    return dias_pred, monto_pred
+
+def predecir_transaccion(cliente_id, comercio, df_transacciones):
+    try:
+        clf, reg_days, reg_amt = cargar_modelos()
+        features = construir_features_de_prediccion(df_transacciones, cliente_id, comercio)
+        
+        prob_recurrencia = predecir_recurrencia(features, clf)
+        resultado = {
+            'probabilidad_de_recompra_30d': round(prob_recurrencia, 4)
+        }
+
+        if prob_recurrencia >= 0.5:
+            dias, monto = predecir_días_y_monto(features, reg_days, reg_amt)
+            resultado.update({
+                'dias_hasta_recompra_estimados': round(dias, 2),
+                'monto_estimado_proxima_compra': round(monto, 2)
+            })
+        else:
+            resultado.update({
+                'mensaje': 'Baja probabilidad de recompra en los próximos 30 días.'
+            })
+
+        return resultado
+
+    except Exception as e:
+        return {'error': str(e)}

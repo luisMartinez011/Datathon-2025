@@ -68,6 +68,15 @@ def construir_dataset(merged_df):
                 'monto_próximo': nxt['monto']
             })
     df = pd.DataFrame(rows)
+
+    # 🧼 Filtrar valores extremos
+    df = df[
+        (df['días_hasta_próxima'] > 0) & 
+        (df['días_hasta_próxima'] <= 60) &
+        (df['monto_próximo'] > 0) & 
+        (df['monto_próximo'] <= 10000)
+    ]
+    
     print("Training examples:", df.shape)
     return df
 
@@ -83,17 +92,35 @@ def entrenar_y_guardar_modelos(model_df):
     y_proba = clf.predict_proba(X_test)[:,1]
     print("ROC-AUC Clasificador:", roc_auc_score(y_test, y_proba))
 
-    # Entrenar regresores solo donde sí hubo próxima compra
+    # Regresión solo para positivos
     pos_mask = y_train == 1
     X_reg = X_train[pos_mask]
     y_days = model_df.loc[X_reg.index, 'días_hasta_próxima']
     y_amt  = model_df.loc[X_reg.index, 'monto_próximo']
 
-    reg_days = XGBRegressor(n_estimators=100, max_depth=4, random_state=42)
-    reg_days.fit(X_reg, y_days)
+    # ➕ Transformaciones logarítmicas
+    y_days_log = np.log1p(y_days)
+    y_amt_log = np.log1p(y_amt)
 
-    reg_amt = XGBRegressor(n_estimators=100, max_depth=4, random_state=42)
-    reg_amt.fit(X_reg, y_amt)
+    reg_days = XGBRegressor(
+        n_estimators=200,
+        max_depth=4,
+        learning_rate=0.05,
+        subsample=0.9,
+        colsample_bytree=0.9,
+        random_state=42
+    )
+    reg_days.fit(X_reg, y_days_log)
+
+    reg_amt = XGBRegressor(
+        n_estimators=200,
+        max_depth=4,
+        learning_rate=0.05,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        random_state=42
+    )
+    reg_amt.fit(X_reg, y_amt_log)
 
     # Evaluación
     test_mask = y_proba >= 0.5
@@ -101,10 +128,13 @@ def entrenar_y_guardar_modelos(model_df):
     y_days_true = model_df.loc[X_reg_test.index, 'días_hasta_próxima']
     y_amt_true  = model_df.loc[X_reg_test.index, 'monto_próximo']
 
-    print("MAE días:", mean_absolute_error(y_days_true, reg_days.predict(X_reg_test)))
-    print("MAE monto:", mean_absolute_error(y_amt_true,  reg_amt.predict(X_reg_test)))
+    # ➕ Invertimos la transformación logarítmica
+    y_days_pred = np.expm1(reg_days.predict(X_reg_test))
+    y_amt_pred  = np.expm1(reg_amt.predict(X_reg_test))
 
-    # Guardar modelos
+    print("MAE días:", mean_absolute_error(y_days_true, y_days_pred))
+    print("MAE monto:", mean_absolute_error(y_amt_true, y_amt_pred))
+
     joblib.dump(clf, 'model_clf.xgb')
     joblib.dump(reg_days, 'model_reg_days.xgb')
     joblib.dump(reg_amt, 'model_reg_amt.xgb')
