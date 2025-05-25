@@ -56,7 +56,7 @@ def predecir_transaccion(cliente_id, comercio, df_transacciones):
     try:
         clf, reg_days, reg_amt = cargar_modelos()
         features = construir_features_de_prediccion(df_transacciones, cliente_id, comercio)
-        
+
         prob_recurrencia = predecir_recurrencia(features, clf)
         resultado = {
             'probabilidad_de_recompra_30d': round(prob_recurrencia, 4)
